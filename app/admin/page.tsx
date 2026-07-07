@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Activity, AlertTriangle, CheckCircle2, Database, FileClock, KeyRound, ListChecks, Lock, Radio, ScrollText, ShieldCheck, UploadCloud, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -388,9 +389,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   className="grid gap-3 border-b border-border px-4 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(0,1fr)_180px_minmax(0,1.4fr)_88px]"
                   key={score.id}
                 >
-                  <a className="focus-ring rounded-sm font-semibold hover:text-primary" href={`/resources/${score.id}`}>
+                  <Link className="focus-ring rounded-sm font-semibold hover:text-primary" href={`/resources/${score.id}`}>
                     {score.title}
-                  </a>
+                  </Link>
                   <span className="flex flex-wrap gap-2">
                     <Badge variant={score.status === "hold" ? "hold" : score.status === "assess" ? "assess" : score.status === "trial" ? "trial" : "adopt"}>
                       {score.status}
@@ -402,10 +403,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   <span className="min-w-0 text-xs leading-5 text-muted-foreground">
                     {score.reasons.length > 0 ? score.reasons.slice(0, 2).join("；") : "暂无评分理由"}
                   </span>
-                  <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={maintenanceHref(token, score.id)}>
+                  <Link className={buttonVariants({ variant: "secondary", size: "sm" })} href={maintenanceHref(token, score.id)}>
                     <Wrench aria-hidden="true" className="h-4 w-4" />
                     维护
-                  </a>
+                  </Link>
                 </div>
               ))}
             </div>

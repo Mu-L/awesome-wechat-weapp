@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ClipboardCheck, ExternalLink, Send } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, ClipboardCheck, ExternalLink, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -310,7 +311,7 @@ export function DoctorForm() {
               {result.report.recommendedResources.length > 0 ? (
                 <div className="grid gap-3">
                   {result.report.recommendedResources.map((resource) => (
-                    <a
+                    <Link
                       className="focus-ring rounded-md border border-border p-3 outline-none transition hover:border-primary/40 hover:bg-muted/40"
                       href={`/resources/${resource.id}`}
                       key={resource.id}
@@ -319,11 +320,11 @@ export function DoctorForm() {
                         <Badge variant={resource.status}>{statusText(resource.status)}</Badge>
                         <Badge variant={`risk-${resource.riskLevel}`}>{riskText(resource.riskLevel)}</Badge>
                         <span className="font-bold">{resource.title}</span>
-                        <ExternalLink aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
+                        <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
                       </div>
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">{resource.reason}</p>
                       <p className="mt-1 text-xs leading-5 text-muted-foreground">{resource.summary}</p>
-                    </a>
+                    </Link>
                   ))}
                 </div>
               ) : (

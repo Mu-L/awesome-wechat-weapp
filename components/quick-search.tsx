@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CornerDownRight, Search, X } from "lucide-react";
 import { statusLabels, riskLabels } from "@/components/resource-labels";
 import { Button } from "@/components/ui/button";
@@ -37,8 +37,18 @@ export function QuickSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [resources, setResources] = useState<SearchResource[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const trimmedQuery = query.trim();
+
+  const closeSearch = useCallback(() => {
+    setOpen(false);
+    setLoading(false);
+    setSearchError("");
+    triggerRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -46,12 +56,12 @@ export function QuickSearch() {
         event.preventDefault();
         setOpen(true);
       }
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && open) closeSearch();
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [closeSearch, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -62,16 +72,30 @@ export function QuickSearch() {
     if (!open) return;
     if (!trimmedQuery) {
       setResources([]);
+      setLoading(false);
+      setSearchError("");
       return;
     }
 
     const controller = new AbortController();
+    setLoading(true);
+    setSearchError("");
     const timeout = window.setTimeout(async () => {
       const params = new URLSearchParams({ q: trimmedQuery, limit: "6" });
       const response = await fetch(`/api/resources?${params.toString()}`, { signal: controller.signal }).catch(() => null);
-      if (!response?.ok) return;
+      if (!response?.ok) {
+        if (!controller.signal.aborted) {
+          setResources([]);
+          setSearchError("搜索暂时不可用，请稍后重试。");
+          setLoading(false);
+        }
+        return;
+      }
       const payload = (await response.json().catch(() => ({}))) as SearchResponse;
-      setResources(payload.resources ?? []);
+      if (!controller.signal.aborted) {
+        setResources(payload.resources ?? []);
+        setLoading(false);
+      }
     }, 180);
 
     return () => {
@@ -88,7 +112,7 @@ export function QuickSearch() {
 
   return (
     <>
-      <Button aria-label="快速搜索" onClick={() => setOpen(true)} size="sm" type="button" variant="secondary">
+      <Button aria-label="快速搜索" onClick={() => setOpen(true)} ref={triggerRef} size="sm" type="button" variant="secondary">
         <Search aria-hidden="true" className="h-4 w-4" />
         <span className="hidden md:inline">快速搜索</span>
         <span className="hidden rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground lg:inline">Ctrl K</span>
@@ -106,13 +130,20 @@ export function QuickSearch() {
                 ref={inputRef}
                 type="search"
                 value={query}
+                aria-label="搜索资源或命令"
+                aria-describedby="quick-search-status"
               />
-              <button className="focus-ring rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setOpen(false)} type="button" aria-label="关闭快速搜索">
+              <button className="focus-ring min-h-11 min-w-11 rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={closeSearch} type="button" aria-label="关闭快速搜索">
                 <X aria-hidden="true" className="h-5 w-5" />
               </button>
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-2">
+              <div className="sr-only" id="quick-search-status" role="status">
+                {loading ? "正在搜索资源" : searchError || (trimmedQuery ? `找到 ${resources.length} 个资源` : "显示常用命令")}
+              </div>
+              {loading ? <p className="px-3 py-4 text-sm text-muted-foreground">正在搜索资源...</p> : null}
+              {searchError ? <p className="px-3 py-4 text-sm text-danger" role="alert">{searchError}</p> : null}
               {resources.length > 0 ? (
                 <div className="py-2">
                   <p className="px-3 pb-2 text-xs font-semibold text-muted-foreground">资源</p>
@@ -121,7 +152,7 @@ export function QuickSearch() {
                       className="focus-ring grid gap-1 rounded-md px-3 py-2 hover:bg-muted"
                       href={`/resources/${resource.id}`}
                       key={resource.id}
-                      onClick={() => setOpen(false)}
+                      onClick={closeSearch}
                     >
                       <span className="font-semibold">{cleanTitle(resource.title)}</span>
                       <span className="line-clamp-2 text-xs leading-5 text-muted-foreground">{resource.description}</span>
@@ -131,13 +162,15 @@ export function QuickSearch() {
                     </Link>
                   ))}
                 </div>
+              ) : trimmedQuery && !loading && !searchError ? (
+                <p className="px-3 py-4 text-sm text-muted-foreground">没有匹配的资源。</p>
               ) : null}
 
               <div className="py-2">
                 <p className="px-3 pb-2 text-xs font-semibold text-muted-foreground">命令</p>
                 {visibleCommands.length > 0 ? (
                   visibleCommands.map((item) => (
-                    <Link className="focus-ring flex items-center gap-3 rounded-md px-3 py-2 hover:bg-muted" href={item.href} key={item.href} onClick={() => setOpen(false)}>
+                    <Link className="focus-ring flex items-center gap-3 rounded-md px-3 py-2 hover:bg-muted" href={item.href} key={item.href} onClick={closeSearch}>
                       <CornerDownRight aria-hidden="true" className="h-4 w-4 text-primary" />
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold">{item.label}</span>
