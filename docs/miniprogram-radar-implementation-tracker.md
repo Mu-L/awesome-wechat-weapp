@@ -17,7 +17,7 @@
 | P0 文档收敛 | 已完成 | 核心文档入口已收敛到产品方案、实施总方案、Vercel 生产方案和本追踪表；重复方案文档已删除；`npm run generate:check`、`npm run mvp-check:test` 和 `npm run deploy:check` 通过 | 后续只维护四份核心文档 |
 | P1 本地 MVP | 已完成 | `npm run check`、`npm run build` 通过 | 保持每次关键变更后复跑 |
 | P2 Vercel Preview 部署 | 已完成 | PR #360 已合并；Preview URL `https://wechat-miniapp-radar-git-feature-wechat-miniapp-radar-justjavac.vercel.app` 曾通过 `npm run deployment:verify -- <preview-url>`、`npm run mvp:check -- <preview-url>`；GitHub `links`、`validate`、Vercel 检查通过 | 后续功能继续走非 `main` 分支和 Preview 验证 |
-| P2.1 Vercel Production 部署 | 已完成 | PR #360 合并到 `main` 后，Production 部署 Ready；生产别名 `https://wechat-miniapp-radar.vercel.app` 通过 `npm run deployment:verify -- <production-url>` 和 `npm run mvp:check -- <production-url>`；`SITE_URL` / `NEXT_PUBLIC_SITE_URL` 已配置到 Vercel Production | 修复 GitHub 自动生产验证使用 deployment URL 导致的 canonical 误报；继续 P3 外部依赖 |
+| P2.1 Vercel Production 部署 | 已完成 | PR #360 合并到 `main` 后，Production 部署 Ready；生产别名 `https://wechat-miniapp-radar.vercel.app` 通过 `npm run deployment:verify -- <production-url>` 和 `npm run mvp:check -- <production-url>`；`SITE_URL` / `NEXT_PUBLIC_SITE_URL` 已配置到 Vercel Production | PR #361 修复 GitHub 自动生产验证使用 deployment URL 导致的 canonical 误报；继续 P3 外部依赖 |
 | P3 Postgres 主库 | 未开始 | `DATABASE_URL` 未配置 | 选择 Neon 或 Supabase，执行迁移和导入 |
 | P4 采集与评分 Cron | 待生产配置 | Cron 代码和鉴权测试已具备 | 配置 `CRON_SECRET` 和 `GITHUB_TOKEN`，做 dry-run |
 | P5 Redis 缓存/限流/任务锁 | 待生产配置 | 本地测试覆盖降级、锁冲突和失败兜底 | 创建 Upstash Redis 并验证 |
@@ -81,7 +81,9 @@
 | 2026-07-07 | Production 环境变量 | `npx vercel env ls`、`/api/health` | 通过 | Vercel Production 已配置 `SITE_URL` 和 `NEXT_PUBLIC_SITE_URL`；`/api/health` 显示 `integrations.siteUrl:true` |
 | 2026-07-07 | Production 部署校验 | `npm run deployment:verify -- https://wechat-miniapp-radar.vercel.app` | 通过 | 27 pass / 7 warn / 0 fail；warning 为 Postgres、GitHub、Cron Secret、Admin Token、Blob、Redis、OpenAI 未配置 |
 | 2026-07-07 | Production MVP 校验 | `npm run mvp:check -- https://wechat-miniapp-radar.vercel.app` | 通过 | 49 pass / 10 warn / 0 fail；warning 为本地/外部生产依赖未配置 |
-| 2026-07-07 | GitHub 自动生产验证 | `Verify Vercel Production` run 28856670441 | 失败待修复 | workflow 使用 Vercel 一次性 deployment URL 校验 sitemap/robots canonical，和生产别名 canonical 不一致；后续分支已调整为优先验证稳定生产域名 |
+| 2026-07-07 | GitHub 自动生产验证 | `Verify Vercel Production` run 28856670441 | 失败待合并 | workflow 使用 Vercel 一次性 deployment URL 校验 sitemap/robots canonical，和生产别名 canonical 不一致；PR #361 已调整为优先验证稳定生产域名，并在生产校验时显式传入期望 canonical |
+| 2026-07-07 | 部署验证脚本 canonical 处理 | `npm run deployment-verify:test`、`npm run verify-vercel-workflow:test` | 通过 | 部署验证脚本支持访问 URL 和 canonical URL 分离；生产 workflow 使用 `EXPECTED_CANONICAL_URL` 保持严格校验 |
+| 2026-07-07 | PR #361 Preview 部署校验 | `npm run deployment:verify -- https://wechat-miniapp-radar-git-chore-fix-production-da3294-justjavac.vercel.app` | 通过 | 26 pass / 8 warn / 0 fail；Preview canonical 指向生产别名，脚本已按 sitemap/robots 一致性处理 |
 
 ## 6. 下一步执行清单
 

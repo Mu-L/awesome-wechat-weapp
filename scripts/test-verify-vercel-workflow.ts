@@ -146,7 +146,7 @@ const expectedCommands = [
   'npm run vercel:preflight -- "$BASE_URL"',
   'npm run mvp:check -- "$BASE_URL"',
   "npm run integrations:verify",
-  'npm run deployment:verify -- "$BASE_URL"'
+  'EXPECTED_CANONICAL_URL="$BASE_URL" npm run deployment:verify -- "$BASE_URL"'
 ];
 let previousIndex = -1;
 for (const command of expectedCommands) {
