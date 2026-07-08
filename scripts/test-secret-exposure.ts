@@ -5,6 +5,9 @@ import { join, relative } from "node:path";
 const sensitiveEnvNames = [
   "DATABASE_URL",
   "OPENAI_API_KEY",
+  "OPENAI_API_URL",
+  "OPENAI_MODEL",
+  "OPENAI_FALLBACK_MODEL",
   "GITHUB_TOKEN",
   "CRON_SECRET",
   "ADMIN_TOKEN",

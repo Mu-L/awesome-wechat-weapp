@@ -40,6 +40,14 @@ function health(overrides: HealthOverrides = {}): HealthCheck {
       error: null
     },
     integrations: {
+      ai: {
+        configured: false,
+        apiKeyConfigured: false,
+        apiUrl: "https://api.openai.com/v1",
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+        fallbackModel: "qwen/qwen3-next-80b-a3b-instruct:free",
+        provider: "openai"
+      },
       openai: false,
       github: false,
       cronSecret: false,
@@ -85,6 +93,14 @@ const configuredItems = buildProductionReadiness(
       error: null
     },
     integrations: {
+      ai: {
+        configured: true,
+        apiKeyConfigured: true,
+        apiUrl: "https://openrouter.ai/api/v1",
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
+        fallbackModel: "qwen/qwen3-next-80b-a3b-instruct:free",
+        provider: "openrouter"
+      },
       openai: true,
       github: true,
       cronSecret: true,
