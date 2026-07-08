@@ -24,6 +24,7 @@ const OPENROUTER_JSON_RESPONSE_FORMAT_MODELS = new Set([
   "google/gemma-4-26b-a4b-it:free",
   "google/gemma-4-31b-it:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
+  "nvidia/nemotron-nano-9b-v2:free",
   "openai/gpt-oss-20b:free",
   "qwen/qwen3-next-80b-a3b-instruct:free"
 ]);
