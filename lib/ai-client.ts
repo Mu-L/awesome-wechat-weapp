@@ -204,12 +204,21 @@ function describeHttpResult(response: Response, text: string) {
   const contentType = response.headers.get("content-type") ?? "none";
   const sseRecords = parseSseDataRecords(text).length;
   const htmlTitle = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1]?.replace(/\s+/g, " ").trim();
+  const htmlPrefix =
+    contentType.includes("text/html") && text.trim().length > 0
+      ? text
+          .trim()
+          .slice(0, 240)
+          .replace(/sk-[A-Za-z0-9_-]+/g, "sk-REDACTED")
+          .replace(/\s+/g, " ")
+      : null;
   return [
     `httpStatus=${response.status}`,
     `responseContentType=${contentType}`,
     `responseTextLength=${text.length}`,
     `sseRecords=${sseRecords}`,
-    htmlTitle ? `htmlTitle=${htmlTitle}` : null
+    htmlTitle ? `htmlTitle=${htmlTitle}` : null,
+    htmlPrefix ? `htmlPrefix=${htmlPrefix}` : null
   ]
     .filter(Boolean)
     .join("; ");
