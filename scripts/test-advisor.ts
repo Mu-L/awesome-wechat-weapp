@@ -8,7 +8,6 @@ const originalEnv = {
   DATABASE_URL: process.env.DATABASE_URL,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   OPENAI_API_URL: process.env.OPENAI_API_URL,
-  OPENAI_API_STYLE: process.env.OPENAI_API_STYLE,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
   OPENAI_FALLBACK_MODEL: process.env.OPENAI_FALLBACK_MODEL,
   KV_REST_API_TOKEN: process.env.KV_REST_API_TOKEN,
@@ -59,7 +58,6 @@ try {
   setEnv("DATABASE_URL", undefined);
   setEnv("OPENAI_API_KEY", undefined);
   setEnv("OPENAI_API_URL", undefined);
-  setEnv("OPENAI_API_STYLE", undefined);
   setEnv("OPENAI_MODEL", undefined);
   setEnv("OPENAI_FALLBACK_MODEL", undefined);
   setEnv("UPSTASH_REDIS_REST_TOKEN", undefined);
@@ -254,131 +252,11 @@ try {
   assert.deepEqual(requestedModels, ["test-primary-model", "qwen/qwen3-next-80b-a3b-instruct:free"], "advisor route should try primary then fallback model");
   globalThis.fetch = originalFetch;
 
-  setEnv("OPENAI_API_URL", "https://agentrouter.org/v1");
-  setEnv("OPENAI_MODEL", "gpt-5.5");
-  setEnv("OPENAI_FALLBACK_MODEL", "gpt-5.5");
-
-  const agentRouterAnswer = {
-    ...draftAiAnswer,
-    recommendation: `AgentRouter 建议：${draftAiAnswer.recommendation}`
-  };
-  let agentRouterRequestCount = 0;
-  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
-    agentRouterRequestCount += 1;
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    assert.equal(url, "https://agentrouter.org/v1/chat/completions");
-    const headers = new Headers(init?.headers);
-    const body = JSON.parse(String(init?.body)) as { model?: string; max_completion_tokens?: number; max_tokens?: number; response_format?: unknown; stream?: boolean };
-    assert.equal(headers.get("accept"), null);
-    assert.equal(headers.get("user-agent"), "codex_cli_rs/0.0.0");
-    assert.equal(headers.get("accept-language"), "en-US,en;q=0.9");
-    assert.equal(body.model, "gpt-5.5");
-    assert.equal(body.max_completion_tokens, undefined);
-    assert.equal(body.max_tokens, 1400);
-    assert.equal(body.response_format, undefined);
-    assert.equal(body.stream, false);
-
-    return Response.json({ choices: [{ message: { content: JSON.stringify(agentRouterAnswer) } }] });
-  };
-
-  const agentRouterRouteResponse = await advisorRoute(
-    new Request("https://example.com/api/advisor", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-forwarded-for": "203.0.113.53"
-      },
-      body: JSON.stringify({ question: questions[0].question })
-    })
-  );
-  assert.equal(agentRouterRouteResponse.status, 200, "advisor route should accept chat content from AgentRouter-compatible endpoints");
-  assert.equal(agentRouterRouteResponse.headers.get("x-advisor-source"), "ai");
-  assert.equal(agentRouterRouteResponse.headers.get("x-advisor-model"), "gpt-5.5");
-  const agentRouterRouteAnswer = (await agentRouterRouteResponse.json()) as ReturnType<typeof createAdvisorAnswer> & { source?: string; model?: string | null };
-  const agentRouterRouteValidation = validateAdvisorAnswer(agentRouterRouteAnswer, resources);
-  assert.equal(agentRouterRouteValidation.ok, true, agentRouterRouteValidation.errors.join("\n"));
-  assert.equal(agentRouterRouteAnswer.source, "ai");
-  assert.equal(agentRouterRouteAnswer.model, "gpt-5.5");
-  assert.match(agentRouterRouteAnswer.recommendation, /^AgentRouter 建议：/);
-  assert.equal(agentRouterRequestCount, 1, "advisor route should deduplicate identical primary and fallback models");
-  globalThis.fetch = originalFetch;
-
-  setEnv("OPENAI_API_STYLE", "responses");
-
-  const agentRouterResponsesAnswer = {
-    ...draftAiAnswer,
-    recommendation: `AgentRouter Responses 建议：${draftAiAnswer.recommendation}`
-  };
-  let agentRouterResponsesRequestCount = 0;
-  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
-    agentRouterResponsesRequestCount += 1;
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    assert.equal(url, "https://agentrouter.org/v1/responses");
-    const body = JSON.parse(String(init?.body)) as {
-      model?: string;
-      instructions?: string;
-      input?: Array<{ role?: string; content?: Array<{ type?: string; text?: string }> }>;
-      max_output_tokens?: number;
-      max_tokens?: number;
-      store?: boolean;
-      stream?: boolean;
-    };
-    const headers = new Headers(init?.headers);
-    assert.equal(headers.get("accept"), "text/event-stream");
-    assert.equal(headers.get("openai-beta"), "responses=v1");
-    assert.equal(body.model, "gpt-5.5");
-    assert.ok(body.instructions && body.instructions.length > 0, "Responses API request should include system instructions");
-    assert.equal(body.input?.length, 1, "Responses API request should include user input message");
-    assert.equal(body.input?.[0]?.role, "user");
-    assert.equal(body.input?.[0]?.content?.[0]?.type, "input_text");
-    assert.equal(body.max_output_tokens, 1400);
-    assert.equal(body.max_tokens, undefined);
-    assert.equal(body.store, false);
-    assert.equal(body.stream, true);
-
-    return new Response(
-      [
-        `event: response.output_text.delta`,
-        `data: ${JSON.stringify({ type: "response.output_text.delta", delta: JSON.stringify(agentRouterResponsesAnswer) })}`,
-        "",
-        `event: response.completed`,
-        `data: ${JSON.stringify({ type: "response.completed" })}`,
-        ""
-      ].join("\n"),
-      {
-        status: 200,
-        headers: { "content-type": "text/event-stream" }
-      }
-    );
-  };
-
-  const agentRouterResponsesRouteResponse = await advisorRoute(
-    new Request("https://example.com/api/advisor", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-forwarded-for": "203.0.113.54"
-      },
-      body: JSON.stringify({ question: questions[0].question })
-    })
-  );
-  assert.equal(agentRouterResponsesRouteResponse.status, 200, "advisor route should accept Responses API output from Codex-compatible endpoints");
-  assert.equal(agentRouterResponsesRouteResponse.headers.get("x-advisor-source"), "ai");
-  assert.equal(agentRouterResponsesRouteResponse.headers.get("x-advisor-model"), "gpt-5.5");
-  const agentRouterResponsesRouteAnswer = (await agentRouterResponsesRouteResponse.json()) as ReturnType<typeof createAdvisorAnswer> & { source?: string; model?: string | null };
-  const agentRouterResponsesRouteValidation = validateAdvisorAnswer(agentRouterResponsesRouteAnswer, resources);
-  assert.equal(agentRouterResponsesRouteValidation.ok, true, agentRouterResponsesRouteValidation.errors.join("\n"));
-  assert.equal(agentRouterResponsesRouteAnswer.source, "ai");
-  assert.equal(agentRouterResponsesRouteAnswer.model, "gpt-5.5");
-  assert.match(agentRouterResponsesRouteAnswer.recommendation, /^AgentRouter Responses 建议：/);
-  assert.equal(agentRouterResponsesRequestCount, 1, "advisor route should call Responses API once when primary and fallback models match");
-  globalThis.fetch = originalFetch;
-
   console.log(
     JSON.stringify(
       {
         checkedAt: new Date().toISOString(),
-        cases: results.length + 5,
+        cases: results.length + 3,
         assertions: [
           "advisor generation",
           "advisor decision structure",
@@ -386,9 +264,7 @@ try {
           "advisor evidence validation",
           "advisor route validation",
           "advisor AI route validation",
-          "advisor AI fallback model",
-          "advisor streaming chat AI content",
-          "advisor responses API content"
+          "advisor AI fallback model"
         ],
         results
       },
@@ -401,7 +277,6 @@ try {
   setEnv("DATABASE_URL", originalEnv.DATABASE_URL);
   setEnv("OPENAI_API_KEY", originalEnv.OPENAI_API_KEY);
   setEnv("OPENAI_API_URL", originalEnv.OPENAI_API_URL);
-  setEnv("OPENAI_API_STYLE", originalEnv.OPENAI_API_STYLE);
   setEnv("OPENAI_MODEL", originalEnv.OPENAI_MODEL);
   setEnv("OPENAI_FALLBACK_MODEL", originalEnv.OPENAI_FALLBACK_MODEL);
   setEnv("KV_REST_API_TOKEN", originalEnv.KV_REST_API_TOKEN);

@@ -9,30 +9,17 @@ export interface AiJsonCompletionResult<T> {
   error: string | null;
 }
 
-interface ChatCompletionChoice {
-  finish_reason?: unknown;
-  delta?: {
-    content?: unknown;
-  };
-  message?: {
-    content?: unknown;
-  };
-}
-
 interface ChatCompletionResponse {
-  choices?: ChatCompletionChoice[];
-  error?: unknown;
-}
-
-interface ResponsesApiResponse {
-  output_text?: unknown;
-  output?: unknown;
+  choices?: Array<{
+    message?: {
+      content?: unknown;
+    };
+  }>;
   error?: unknown;
 }
 
 const DEFAULT_AI_TIMEOUT_MS = 8_000;
 const DEFAULT_AI_MAX_TOKENS = 1400;
-const AGENTROUTER_API_URL = "https://agentrouter.org/v1";
 const OPENROUTER_JSON_RESPONSE_FORMAT_MODELS = new Set([
   "google/gemma-4-26b-a4b-it:free",
   "google/gemma-4-31b-it:free",
@@ -46,10 +33,6 @@ function completionUrl(config: AiConfig) {
   return `${config.apiUrl}/chat/completions`;
 }
 
-function responsesUrl(config: AiConfig) {
-  return `${config.apiUrl}/responses`;
-}
-
 function openRouterHeaders(config: AiConfig): Record<string, string> {
   if (config.provider !== "openrouter") return {};
 
@@ -60,34 +43,12 @@ function openRouterHeaders(config: AiConfig): Record<string, string> {
   };
 }
 
-function agentRouterHeaders(config: AiConfig): Record<string, string> {
-  if (config.apiUrl.toLowerCase() !== AGENTROUTER_API_URL) return {};
-
-  return {
-    "user-agent": "codex_cli_rs/0.0.0",
-    "accept-language": "en-US,en;q=0.9"
-  };
-}
-
 function responseFormatForModel(config: AiConfig, model: string) {
   if (config.provider === "openrouter" && OPENROUTER_JSON_RESPONSE_FORMAT_MODELS.has(model)) {
     return { response_format: { type: "json_object" } };
   }
 
   return {};
-}
-
-function tokenLimitForModel(config: AiConfig, model: string) {
-  if (config.provider === "openai" && /^gpt-5(?:\.|-|$)/i.test(model)) {
-    return { max_completion_tokens: DEFAULT_AI_MAX_TOKENS };
-  }
-
-  return { max_tokens: DEFAULT_AI_MAX_TOKENS };
-}
-
-function shouldStreamChatCompletion(config: AiConfig) {
-  if (config.apiUrl.toLowerCase() === AGENTROUTER_API_URL) return false;
-  return config.provider === "custom";
 }
 
 async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
@@ -153,191 +114,6 @@ function parseCompletionPayload(text: string) {
   }
 }
 
-function contentPartText(part: unknown) {
-  if (typeof part === "string") return part;
-  if (typeof part !== "object" || part === null) return "";
-
-  const record = part as Record<string, unknown>;
-  if (typeof record.text === "string") return record.text;
-  if (typeof record.content === "string") return record.content;
-
-  return "";
-}
-
-function extractMessageContentText(content: unknown) {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map(contentPartText).join("");
-  if (typeof content === "object" && content !== null) return contentPartText(content);
-  return "";
-}
-
-function extractResponsesOutputText(payload: ResponsesApiResponse | null) {
-  if (!payload || typeof payload !== "object") return "";
-  if (typeof payload.output_text === "string") return payload.output_text;
-  if (!Array.isArray(payload.output)) return "";
-
-  return payload.output
-    .flatMap((item) => {
-      if (typeof item === "string") return [item];
-      if (typeof item !== "object" || item === null) return [];
-
-      const record = item as Record<string, unknown>;
-      if (typeof record.text === "string") return [record.text];
-      if (typeof record.content === "string") return [record.content];
-      if (Array.isArray(record.content)) return record.content.map(contentPartText);
-
-      return [];
-    })
-    .join("");
-}
-
-function parseSseDataRecords(text: string) {
-  const records: unknown[] = [];
-
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("data:")) continue;
-
-    const data = trimmed.slice("data:".length).trim();
-    if (!data || data === "[DONE]") continue;
-
-    try {
-      records.push(JSON.parse(data) as unknown);
-    } catch {
-      // Ignore non-JSON keep-alive or provider-specific SSE data lines.
-    }
-  }
-
-  return records;
-}
-
-function describeHttpResult(response: Response, text: string) {
-  const contentType = response.headers.get("content-type") ?? "none";
-  const sseRecords = parseSseDataRecords(text).length;
-  const htmlTitle = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1]?.replace(/\s+/g, " ").trim();
-  const htmlPrefix =
-    contentType.includes("text/html") && text.trim().length > 0
-      ? text
-          .trim()
-          .slice(0, 240)
-          .replace(/sk-[A-Za-z0-9_-]+/g, "sk-REDACTED")
-          .replace(/\s+/g, " ")
-      : null;
-  return [
-    `httpStatus=${response.status}`,
-    `responseContentType=${contentType}`,
-    `responseTextLength=${text.length}`,
-    `sseRecords=${sseRecords}`,
-    htmlTitle ? `htmlTitle=${htmlTitle}` : null,
-    htmlPrefix ? `htmlPrefix=${htmlPrefix}` : null
-  ]
-    .filter(Boolean)
-    .join("; ");
-}
-
-function stringField(record: Record<string, unknown>, name: string) {
-  const value = record[name];
-  return typeof value === "string" ? value : "";
-}
-
-function responsesInputForMessages(messages: AiPromptMessage[]) {
-  const instructions = messages
-    .filter((message) => message.role === "system")
-    .map((message) => message.content.trim())
-    .filter(Boolean)
-    .join("\n\n");
-  const input = messages
-    .filter((message) => message.role !== "system")
-    .map((message) => ({
-      role: message.role,
-      content: [
-        {
-          type: "input_text",
-          text: message.content
-        }
-      ]
-    }));
-
-  return {
-    ...(instructions ? { instructions } : {}),
-    input: input.length > 0 ? input : messages.map((message) => ({ role: message.role, content: message.content }))
-  };
-}
-
-function extractResponsesPayloadText(text: string) {
-  const payload = parseCompletionPayload(text) as ResponsesApiResponse | null;
-  const jsonContent = extractResponsesOutputText(payload);
-  if (jsonContent.trim().length > 0) return { content: jsonContent, payload };
-
-  const sseRecords = parseSseDataRecords(text);
-  const completedContent = sseRecords
-    .map((item) => {
-      if (typeof item !== "object" || item === null) return "";
-      const record = item as Record<string, unknown>;
-      const response = record.response;
-      return extractResponsesOutputText((response && typeof response === "object" ? response : record) as ResponsesApiResponse);
-    })
-    .filter((value) => value.trim().length > 0);
-  if (completedContent.length > 0) return { content: completedContent.at(-1) ?? "", payload };
-
-  const deltaContent = sseRecords
-    .map((item) => {
-      if (typeof item !== "object" || item === null) return "";
-      const record = item as Record<string, unknown>;
-      return stringField(record, "delta") || stringField(record, "text") || stringField(record, "output_text");
-    })
-    .join("");
-
-  return { content: deltaContent, payload };
-}
-
-function extractChatChoiceText(choice: ChatCompletionChoice | undefined) {
-  const messageContent = extractMessageContentText(choice?.message?.content);
-  if (messageContent.trim().length > 0) return messageContent;
-  return extractMessageContentText(choice?.delta?.content);
-}
-
-function extractChatPayloadText(text: string) {
-  const payload = parseCompletionPayload(text);
-  const jsonContent = extractChatChoiceText(payload?.choices?.[0]);
-  if (jsonContent.trim().length > 0) return { content: jsonContent, payload };
-
-  const sseRecords = parseSseDataRecords(text);
-  const sseContent = sseRecords
-    .flatMap((item) => {
-      if (typeof item !== "object" || item === null) return [];
-      const record = item as ChatCompletionResponse;
-      if (!Array.isArray(record.choices)) return [];
-      return record.choices.map(extractChatChoiceText);
-    })
-    .join("");
-
-  return { content: sseContent, payload };
-}
-
-function describeEmptyChoice(choice: ChatCompletionChoice | undefined) {
-  const content = choice?.message?.content;
-  const contentType = Array.isArray(content) ? "array" : content === null ? "null" : typeof content;
-  const messageKeys = choice?.message && typeof choice.message === "object" ? Object.keys(choice.message).sort().join(",") || "none" : "none";
-  const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : "unknown";
-  return `contentType=${contentType}; messageKeys=${messageKeys}; finishReason=${finishReason}`;
-}
-
-function describeCompletionPayload(payload: ChatCompletionResponse | null) {
-  if (!payload || typeof payload !== "object") return "payloadKeys=none; choices=none";
-  const payloadKeys = Object.keys(payload).sort().join(",") || "none";
-  const choiceCount = Array.isArray(payload.choices) ? payload.choices.length : "none";
-  return `payloadKeys=${payloadKeys}; choices=${choiceCount}`;
-}
-
-function describeResponsesPayload(payload: ResponsesApiResponse | null) {
-  if (!payload || typeof payload !== "object") return "payloadKeys=none; output=none";
-  const payloadKeys = Object.keys(payload).sort().join(",") || "none";
-  const outputCount = Array.isArray(payload.output) ? payload.output.length : "none";
-  const outputTextType = payload.output_text === null ? "null" : typeof payload.output_text;
-  return `payloadKeys=${payloadKeys}; output=${outputCount}; outputTextType=${outputTextType}`;
-}
-
 async function requestChatCompletion<T>({
   config,
   model,
@@ -351,91 +127,37 @@ async function requestChatCompletion<T>({
 }) {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
-  const stream = shouldStreamChatCompletion(config);
 
   const { response, text } = await fetchTextWithTimeout(
     completionUrl(config),
     {
       method: "POST",
       headers: {
-        ...(stream ? { accept: "text/event-stream" } : {}),
         "content-type": "application/json",
         authorization: `Bearer ${apiKey}`,
-        ...agentRouterHeaders(config),
         ...openRouterHeaders(config)
       },
       body: JSON.stringify({
         model,
         messages,
         temperature: 0.2,
-        stream,
-        ...tokenLimitForModel(config, model),
+        max_tokens: DEFAULT_AI_MAX_TOKENS,
+        stream: false,
         ...responseFormatForModel(config, model)
       })
     },
     timeoutMs
   );
 
-  const { content, payload } = extractChatPayloadText(text);
+  const payload = parseCompletionPayload(text);
   if (!response.ok) {
     const providerError = stringifyProviderError(payload?.error);
     throw new Error(providerError ? `AI provider rejected ${model}: ${providerError}` : `AI provider rejected ${model} with HTTP ${response.status}.`);
   }
 
-  if (content.trim().length === 0) {
-    throw new Error(
-      `AI provider returned an empty response for ${model}. ${describeHttpResult(response, text)}; ${describeEmptyChoice(payload?.choices?.[0])}; ${describeCompletionPayload(payload)}`
-    );
-  }
-
-  return parseJsonObject<T>(content);
-}
-
-async function requestResponsesCompletion<T>({
-  config,
-  model,
-  messages,
-  timeoutMs
-}: {
-  config: AiConfig;
-  model: string;
-  messages: AiPromptMessage[];
-  timeoutMs: number;
-}) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
-
-  const { response, text } = await fetchTextWithTimeout(
-    responsesUrl(config),
-    {
-      method: "POST",
-      headers: {
-        accept: "text/event-stream",
-        "content-type": "application/json",
-        "openai-beta": "responses=v1",
-        authorization: `Bearer ${apiKey}`,
-        ...agentRouterHeaders(config),
-        ...openRouterHeaders(config)
-      },
-      body: JSON.stringify({
-        model,
-        ...responsesInputForMessages(messages),
-        max_output_tokens: DEFAULT_AI_MAX_TOKENS,
-        store: false,
-        stream: true
-      })
-    },
-    timeoutMs
-  );
-
-  const { content, payload } = extractResponsesPayloadText(text);
-  if (!response.ok) {
-    const providerError = stringifyProviderError(payload?.error);
-    throw new Error(providerError ? `AI provider rejected ${model}: ${providerError}` : `AI provider rejected ${model} with HTTP ${response.status}.`);
-  }
-
-  if (content.trim().length === 0) {
-    throw new Error(`AI provider returned an empty response for ${model}. ${describeHttpResult(response, text)}; ${describeResponsesPayload(payload)}`);
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || content.trim().length === 0) {
+    throw new Error(`AI provider returned an empty response for ${model}.`);
   }
 
   return parseJsonObject<T>(content);
@@ -464,7 +186,7 @@ export async function createAiJsonCompletion<T>({
 
   for (const model of models) {
     try {
-      const value = await (config.apiStyle === "responses" ? requestResponsesCompletion<T> : requestChatCompletion<T>)({
+      const value = await requestChatCompletion<T>({
         config,
         model,
         messages,
