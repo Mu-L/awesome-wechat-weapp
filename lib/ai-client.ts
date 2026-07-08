@@ -203,7 +203,16 @@ function parseSseDataRecords(text: string) {
 function describeHttpResult(response: Response, text: string) {
   const contentType = response.headers.get("content-type") ?? "none";
   const sseRecords = parseSseDataRecords(text).length;
-  return `httpStatus=${response.status}; responseContentType=${contentType}; responseTextLength=${text.length}; sseRecords=${sseRecords}`;
+  const htmlTitle = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text)?.[1]?.replace(/\s+/g, " ").trim();
+  return [
+    `httpStatus=${response.status}`,
+    `responseContentType=${contentType}`,
+    `responseTextLength=${text.length}`,
+    `sseRecords=${sseRecords}`,
+    htmlTitle ? `htmlTitle=${htmlTitle}` : null
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 function stringField(record: Record<string, unknown>, name: string) {
