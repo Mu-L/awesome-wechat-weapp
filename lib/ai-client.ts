@@ -65,8 +65,22 @@ async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: n
 
 function stringifyProviderError(value: unknown) {
   if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null && "message" in value && typeof value.message === "string") {
-    return value.message;
+  if (typeof value === "object" && value !== null) {
+    const error = value as Record<string, unknown>;
+    const parts = [
+      typeof error.message === "string" ? error.message : null,
+      typeof error.code === "string" || typeof error.code === "number" ? `code=${String(error.code)}` : null
+    ];
+    const metadata = error.metadata;
+    if (typeof metadata === "object" && metadata !== null) {
+      const fields = metadata as Record<string, unknown>;
+      parts.push(typeof fields.reason === "string" ? fields.reason : null);
+      parts.push(typeof fields.raw === "string" ? fields.raw : null);
+      parts.push(typeof fields.provider_name === "string" ? `provider=${fields.provider_name}` : null);
+    }
+
+    const message = parts.filter(Boolean).join("; ");
+    if (message) return message;
   }
   return null;
 }
